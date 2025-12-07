@@ -1,0 +1,25 @@
+{
+  "name": "agricultural-platform-frontend",
+  "version": "1.0.0",
+  "description": "农产品产销分析与辅助决策平台前端",
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint"
+  },
+  "dependencies": {
+    "vue": "^3.3.4",
+    "vue-router": "^4.2.5",
+    "vuex": "^4.1.0",
+    "axios": "^1.6.0",
+    "echarts": "^5.4.3",
+    "vue-echarts": "^6.6.1",
+    "element-plus": "^2.4.2",
+    "@element-plus/icons-vue": "^2.3.1"
+  },
+  "devDependencies": {
+    "@vue/cli-service": "^5.0.8",
+    "@vue/compiler-sfc": "^3.3.4"
+  }
+}
+

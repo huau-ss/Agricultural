@@ -1,0 +1,30 @@
+前端启动步骤：
+
+1. 确保已安装 Node.js 14+
+   node --version
+
+2. 进入前端目录
+   cd frontend
+
+3. 安装依赖（如果还没安装）
+   npm install
+
+4. 如果 npm install 失败，使用国内镜像：
+   npm install --registry=https://registry.npmmirror.com
+
+5. 启动开发服务器
+   npm run serve
+
+6. 如果提示找不到 vue-cli-service，需要安装 Vue CLI：
+   npm install -g @vue/cli
+   或者
+   npm install --save-dev @vue/cli-service
+
+7. 启动成功后，访问：
+   http://localhost:8080
+
+常见问题：
+- 端口 8080 被占用：修改 vue.config.js 中的 port
+- 依赖安装失败：使用国内镜像或检查网络
+- 启动失败：检查 Node.js 版本是否兼容
+
