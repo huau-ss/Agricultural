@@ -22,7 +22,19 @@ class SupplyInfoViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -67,7 +79,19 @@ class DemandInfoViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -111,7 +135,24 @@ class TradeMatchViewSet(viewsets.ModelViewSet):
     ordering = ['-match_score', '-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页和自动匹配）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 自动匹配：如果没有匹配记录，尝试创建新的匹配
+        if queryset.count() == 0:
+            self._auto_match()
+            queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -138,12 +179,18 @@ class TradeMatchViewSet(viewsets.ModelViewSet):
         # 计算匹配度
         match_score = self._calculate_match_score(supply, demand)
         
-        match = TradeMatch.objects.create(
+        match, created = TradeMatch.objects.get_or_create(
             supply=supply,
             demand=demand,
-            match_score=match_score,
-            status='pending'
+            defaults={
+                'match_score': match_score,
+                'status': 'pending'
+            }
         )
+        
+        if not created:
+            match.match_score = match_score
+            match.save()
         
         serializer = self.get_serializer(match)
         return ResponseUtil.success(data=serializer.data, msg='匹配成功')
@@ -164,6 +211,29 @@ class TradeMatchViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(match)
         return ResponseUtil.success(data=serializer.data, msg='确认成功')
+    
+    def _auto_match(self):
+        """自动匹配供应和需求"""
+        supplies = SupplyInfo.objects.filter(status='active')[:10]
+        demands = DemandInfo.objects.filter(status='active')[:10]
+        
+        for supply in supplies:
+            for demand in demands:
+                # 检查是否已匹配
+                if TradeMatch.objects.filter(supply=supply, demand=demand).exists():
+                    continue
+                
+                # 计算匹配度
+                match_score = self._calculate_match_score(supply, demand)
+                
+                # 如果匹配度大于60，创建匹配记录
+                if match_score >= 60:
+                    TradeMatch.objects.create(
+                        supply=supply,
+                        demand=demand,
+                        match_score=match_score,
+                        status='pending'
+                    )
     
     def _calculate_match_score(self, supply, demand):
         """计算匹配度"""
@@ -197,4 +267,3 @@ class TradeMatchViewSet(viewsets.ModelViewSet):
             score += 20 * quantity_ratio
         
         return min(score, 100.0)
-

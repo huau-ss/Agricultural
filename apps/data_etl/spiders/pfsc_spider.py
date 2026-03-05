@@ -76,7 +76,9 @@ class PFSCSpider(BaseSpider):
         return data_list
     
     def _try_api_endpoints(self) -> List[Dict]:
-        """尝试真实的API端点"""
+        """尝试真实的API端点，获取最近三个月的数据"""
+        from datetime import timedelta, date
+        
         data_list = []
         
         try:
@@ -92,10 +94,25 @@ class PFSCSpider(BaseSpider):
                 'Cache-Control': 'no-cache',
             })
             
-            # 分页获取所有数据
+            # 计算日期范围：最近三个月（90天）
+            today = datetime.now().date()
+            three_months_ago = today - timedelta(days=90)
+            
+            logger.info(f"开始获取最近三个月的数据: {three_months_ago} 至 {today}")
+            
+            # 策略：按日期循环请求，确保获取完整的历史数据
+            # 从今天往前，每天请求一次，直到三个月前
+            current_date = today
+            date_requests = 0
+            max_date_requests = 100  # 最多请求100天（防止无限循环）
+            
+            # 先尝试获取所有数据（不按日期过滤），然后按日期过滤
+            # 这样可以获取更多历史数据
             page_num = 1
             page_size = 100  # 每页100条
-            max_pages = 100  # 最多获取100页，防止无限循环
+            max_pages = 500  # 增加最大页数，确保能获取足够的历史数据
+            total_fetched = 0
+            consecutive_old_pages = 0  # 连续旧数据页数
             
             while page_num <= max_pages:
                 # 请求参数
@@ -132,22 +149,110 @@ class PFSCSpider(BaseSpider):
                             logger.info("没有更多数据")
                             break
                         
-                        # 解析数据
+                        # 解析数据并过滤日期
                         page_data_count = 0
+                        filtered_count = 0
+                        page_has_recent_data = False  # 这一页是否有最近三个月的数据
+                        
                         for item in items:
                             parsed = self._parse_pfsc_item(item)
                             if parsed:
-                                data_list.append(parsed)
                                 page_data_count += 1
+                                
+                                # 检查日期是否在最近三个月内
+                                item_date = parsed.get('date')
+                                if item_date:
+                                    if isinstance(item_date, str):
+                                        try:
+                                            # 尝试多种日期格式
+                                            if ' ' in item_date:
+                                                item_date = datetime.strptime(item_date.split()[0], '%Y-%m-%d').date()
+                                            else:
+                                                item_date = datetime.strptime(item_date, '%Y-%m-%d').date()
+                                        except:
+                                            try:
+                                                item_date = datetime.strptime(item_date[:10], '%Y-%m-%d').date()
+                                            except:
+                                                item_date = None
+                                    
+                                    if item_date:
+                                        # 只添加最近三个月内的数据
+                                        if three_months_ago <= item_date <= today:
+                                            data_list.append(parsed)
+                                            filtered_count += 1
+                                            page_has_recent_data = True
+                                        # 不在这里break，继续处理，因为数据可能不是按日期排序的
+                                else:
+                                    # 如果没有日期，也添加（可能是当天数据）
+                                    data_list.append(parsed)
+                                    filtered_count += 1
+                                    page_has_recent_data = True
                         
-                        logger.info(f"第 {page_num} 页获取到 {page_data_count} 条数据")
+                        logger.info(f"第 {page_num} 页: 获取 {page_data_count} 条，符合日期范围 {filtered_count} 条")
+                        total_fetched += page_data_count
+                        
+                        # 检查是否应该继续
+                        if not page_has_recent_data and page_data_count > 0:
+                            # 这一页没有最近三个月的数据，检查是否所有数据都太旧
+                            consecutive_old_pages += 1
+                            
+                            # 检查前几条数据的日期
+                            sample_items = items[:min(20, len(items))]
+                            all_old = True
+                            oldest_date_in_page = None
+                            
+                            for item in sample_items:
+                                parsed = self._parse_pfsc_item(item)
+                                if parsed:
+                                    item_date = parsed.get('date')
+                                    if item_date:
+                                        if isinstance(item_date, str):
+                                            try:
+                                                if ' ' in item_date:
+                                                    item_date = datetime.strptime(item_date.split()[0], '%Y-%m-%d').date()
+                                                else:
+                                                    item_date = datetime.strptime(item_date, '%Y-%m-%d').date()
+                                            except:
+                                                try:
+                                                    item_date = datetime.strptime(item_date[:10], '%Y-%m-%d').date()
+                                                except:
+                                                    item_date = None
+                                        
+                                        if item_date:
+                                            if oldest_date_in_page is None or item_date < oldest_date_in_page:
+                                                oldest_date_in_page = item_date
+                                            
+                                            if item_date >= three_months_ago:
+                                                all_old = False
+                                                break
+                            
+                            # 如果连续5页都是旧数据，且最旧的日期已经早于三个月，停止获取
+                            if consecutive_old_pages >= 5 and oldest_date_in_page and oldest_date_in_page < three_months_ago:
+                                logger.info(f"连续 {consecutive_old_pages} 页都是旧数据，最旧日期 {oldest_date_in_page}，停止获取")
+                                break
+                        else:
+                            consecutive_old_pages = 0  # 重置计数器
                         
                         # 检查是否还有下一页
-                        if not content.get('hasNextPage', False):
+                        has_next = content.get('hasNextPage', False)
+                        total_pages = content.get('pages', 0)
+                        
+                        if not has_next or (total_pages > 0 and page_num >= total_pages):
+                            logger.info(f"已到达最后一页（共 {total_pages} 页）")
                             break
                         
                         page_num += 1
-                        self.sleep(0.5)  # 避免请求过快
+                        self.sleep(0.3)  # 避免请求过快，稍微降低延迟
+                        
+                        # 如果已经获取了足够的数据，检查是否已经覆盖了三个月
+                        if total_fetched > 5000:  # 如果已经获取超过5000条
+                            # 检查数据日期范围
+                            dates = [item.get('date') for item in data_list if item.get('date')]
+                            if dates:
+                                min_date = min(dates)
+                                if min_date <= three_months_ago:
+                                    logger.info(f"已获取足够数据，日期范围已覆盖到 {min_date}")
+                                    break
                         
                     elif response and response.status_code == 401:
                         logger.warning("API需要认证，可能需要登录或token")
@@ -158,10 +263,46 @@ class PFSCSpider(BaseSpider):
                         
                 except Exception as e:
                     logger.error(f"请求第 {page_num} 页失败: {str(e)}")
-                    break
+                    # 如果连续失败多次，停止
+                    if page_num > 10:  # 至少尝试10页
+                        break
+                    continue
             
             if data_list:
-                logger.info(f"成功从API获取 {len(data_list)} 条数据")
+                # 去重：根据产品名称、市场名称、日期去重
+                seen = set()
+                unique_data_list = []
+                for item in data_list:
+                    key = (
+                        item.get('product_name'),
+                        item.get('market_name'),
+                        str(item.get('date'))
+                    )
+                    if key not in seen:
+                        seen.add(key)
+                        unique_data_list.append(item)
+                
+                data_list = unique_data_list
+                
+                # 按日期排序，最新的在前
+                data_list.sort(key=lambda x: x.get('date', datetime.min.date()), reverse=True)
+                
+                # 统计日期范围
+                dates = [item.get('date') for item in data_list if item.get('date')]
+                if dates:
+                    min_date = min(dates)
+                    max_date = max(dates)
+                    logger.info(f"成功从API获取 {len(data_list)} 条数据（去重后）")
+                    logger.info(f"数据日期范围: {min_date} 至 {max_date}")
+                    logger.info(f"目标日期范围: {three_months_ago} 至 {today}")
+                    
+                    # 检查是否覆盖了三个月
+                    if min_date > three_months_ago:
+                        logger.warning(f"数据日期范围未完全覆盖三个月，最早日期 {min_date} 晚于目标日期 {three_months_ago}")
+                    else:
+                        logger.info("✓ 数据日期范围已覆盖最近三个月")
+                else:
+                    logger.info(f"成功从API获取 {len(data_list)} 条数据（部分数据无日期）")
             else:
                 logger.warning("未能从API获取到数据")
         
@@ -517,10 +658,27 @@ class PFSCSpider(BaseSpider):
             elif '斤' not in unit:
                 unit = '元/斤'  # 默认单位
             
-            # 解析日期
+            # 解析日期 - 优先使用reportTime，其次inStorageTime
             report_time = item.get('reportTime', '')
             if not report_time:
                 report_time = item.get('inStorageTime', '')
+            
+            # 解析日期，确保能正确解析
+            parsed_date = self._parse_date(report_time)
+            
+            # 如果解析失败，尝试从其他字段获取
+            if parsed_date == datetime.now().date() and report_time:
+                # 尝试其他日期格式
+                try:
+                    # 处理带时间的日期字符串
+                    if ' ' in report_time:
+                        date_part = report_time.split()[0]
+                        parsed_date = datetime.strptime(date_part, '%Y-%m-%d').date()
+                    elif 'T' in report_time:
+                        date_part = report_time.split('T')[0]
+                        parsed_date = datetime.strptime(date_part, '%Y-%m-%d').date()
+                except:
+                    pass
             
             data = {
                 'product_name': product_name,
@@ -529,7 +687,7 @@ class PFSCSpider(BaseSpider):
                 'unit': unit,
                 'market_name': item.get('marketName', ''),
                 'region': item.get('provinceName', '') or item.get('areaName', ''),
-                'date': self._parse_date(report_time),
+                'date': parsed_date,
                 'raw_content': json.dumps(item, ensure_ascii=False),
             }
             
@@ -698,19 +856,46 @@ class PFSCSpider(BaseSpider):
         return '其他'
     
     def _parse_date(self, date_str) -> datetime.date:
-        """解析日期"""
+        """解析日期，支持多种格式"""
         if not date_str:
             return datetime.now().date()
         
+        date_str = str(date_str).strip()
+        
+        # 如果包含时间，先提取日期部分
+        if ' ' in date_str:
+            date_str = date_str.split()[0]
+        if 'T' in date_str:
+            date_str = date_str.split('T')[0]
+        
         try:
-            formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y%m%d', '%Y-%m-%d %H:%M:%S', '%Y年%m月%d日']
+            # 尝试多种日期格式
+            formats = [
+                '%Y-%m-%d',
+                '%Y/%m/%d',
+                '%Y%m%d',
+                '%Y-%m-%d %H:%M:%S',
+                '%Y/%m/%d %H:%M:%S',
+                '%Y年%m月%d日',
+                '%Y.%m.%d',
+            ]
+            
             for fmt in formats:
                 try:
-                    return datetime.strptime(str(date_str), fmt).date()
+                    return datetime.strptime(date_str, fmt).date()
                 except:
                     continue
-        except:
-            pass
+            
+            # 如果所有格式都失败，尝试提取数字
+            import re
+            match = re.search(r'(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})', date_str)
+            if match:
+                year, month, day = match.groups()
+                return datetime(int(year), int(month), int(day)).date()
+                
+        except Exception as e:
+            logger.debug(f"日期解析失败: {date_str}, 错误: {str(e)}")
         
+        # 如果解析失败，返回今天（但会在调用处检查）
         return datetime.now().date()
 

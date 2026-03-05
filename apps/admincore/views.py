@@ -31,7 +31,19 @@ class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -52,7 +64,19 @@ class PriceAlertViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -93,7 +117,19 @@ class AlertRuleViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -134,7 +170,19 @@ class UserPermissionViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -170,7 +218,19 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['-date_joined']
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     
@@ -307,7 +367,19 @@ class UserAlertSubscriptionViewSet(viewsets.ModelViewSet):
         return UserAlertSubscription.objects.none()
     
     def list(self, request, *args, **kwargs):
+        """列表查询（支持分页）"""
+        from utils.pagination import StandardResultsSetPagination
+        
         queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # 无分页
         serializer = self.get_serializer(queryset, many=True)
         return ResponseUtil.success(data=serializer.data, msg='查询成功')
     

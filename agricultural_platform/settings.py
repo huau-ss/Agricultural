@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
+    'django_apscheduler',  # 定时任务调度
     # 自定义APP
     'apps.data_etl',
     'apps.market',
@@ -207,5 +208,19 @@ ALGORITHM_CONFIG = {
         'batch_size': 32,
         'units': 50,
     },
+}
+
+# 定时任务配置
+ENABLE_SCHEDULER = True  # 是否启用定时任务调度器
+SCHEDULER_CONFIG = {
+    "apscheduler.jobstores.default": {
+        "class": "django_apscheduler.jobstores:DjangoJobStore"
+    },
+    'apscheduler.executors.processpool': {
+        "type": "processpool"
+    },
+    'apscheduler.job_defaults.coalesce': 'false',
+    'apscheduler.job_defaults.max_instances': '3',
+    'apscheduler.timezone': 'Asia/Shanghai',  # 时区设置
 }
 

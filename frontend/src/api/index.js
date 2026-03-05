@@ -22,10 +22,33 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   response => {
+    // 统一处理后端返回的 {code, msg, data} 格式
+    const res = response.data
+    if (res.code !== undefined) {
+      // 后端使用统一响应格式
+      if (res.code === 200) {
+        return response // 成功，直接返回
+      } else {
+        // 业务错误
+        const error = new Error(res.msg || '请求失败')
+        error.code = res.code
+        error.data = res.data
+        return Promise.reject(error)
+      }
+    }
+    // 兼容其他格式
     return response
   },
   error => {
     console.error('API错误:', error)
+    // 处理HTTP错误
+    if (error.response) {
+      const res = error.response.data
+      if (res && res.code !== undefined) {
+        error.code = res.code
+        error.message = res.msg || error.message
+      }
+    }
     return Promise.reject(error)
   }
 )
@@ -72,6 +95,9 @@ export default {
     getLogs: (params) => api.get('/admincore/logs/', { params }),
     getAlerts: (params) => api.get('/admincore/alerts/', { params }),
     getAlertRules: (params) => api.get('/admincore/alert-rules/', { params }),
+    createAlertRule: (data) => api.post('/admincore/alert-rules/', data),
+    updateAlertRule: (id, data) => api.put(`/admincore/alert-rules/${id}/`, data),
+    deleteAlertRule: (id) => api.delete(`/admincore/alert-rules/${id}/`),
     getMessages: (params) => api.get('/admincore/messages/', { params }),
     getUnreadCount: () => api.get('/admincore/messages/unread_count/'),
     markMessageRead: (id) => api.post(`/admincore/messages/${id}/mark_read/`),
